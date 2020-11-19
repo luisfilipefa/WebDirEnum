@@ -44,7 +44,7 @@ def fetch(url, session, log_file):
             status = response.status_code
 
         if status < 400:
-            print(f"+ [+] Found: {url.strip()} (Status: {status}) [+]")
+            print(f"+ [+] Found: {url.strip()} (Status: {status})")
             return True
     except requests.exceptions.RequestException as e:
         print(f"+ [!] An exception occurred: See log file... [!]")
@@ -71,12 +71,12 @@ def main():
     log_file = pathlib.Path(f"{log_filename}.log").resolve()
 
     print("+"+"-"*50+"+")
-    print(f"+ [*] Started at {start} [*]")
+    print(f"+ [*] Started at {start}")
     print("+"+"-"*50+"+")
-    print(f"+ [*] Url: {args.url} [*]")
-    print(f"+ [*] Wordlist: {args.wordlist} [*]")
-    print(f"+ [*] {wordlist_len} words in wordlist [*]")
-    print(f"+ [*] Threads: {args.threads} [*]")
+    print(f"+ [*] Url: {args.url}")
+    print(f"+ [*] Wordlist: {args.wordlist}")
+    print(f"+ [*] {wordlist_len} words in wordlist")
+    print(f"+ [*] Threads: {args.threads}")
     print("+"+"-"*50+"+")
 
     with requests.Session() as session:
@@ -97,8 +97,8 @@ def main():
     te = time.perf_counter()
 
     print("+"+"-"*50+"+")
-    print(f"+ [*] Finished at {end} [*]")
-    print(f"+ [*] Found {urls_found} urls in {round(te-ts,2)} seconds [*]")
+    print(f"+ [*] Finished at {end}")
+    print(f"+ [*] Found {urls_found} urls in {round(te-ts,2)} seconds")
     print("+"+"-"*50+"+")
 
 
