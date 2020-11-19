@@ -1,6 +1,6 @@
 # WebDirEnum
 
-Simples multithreaded tool to bruteforce web directories.
+Simple multithreaded tool to bruteforce web directories.
 
 ## Installation
 
