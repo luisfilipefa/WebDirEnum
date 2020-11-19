@@ -3,8 +3,12 @@ import argparse
 import time
 import requests
 import uuid
+# import schedule
 from datetime import datetime
 from fake_headers import Headers
+from stem import Signal
+from stem.control import Controller
+# from threading import Thread
 import concurrent.futures as cf
 
 
@@ -32,16 +36,35 @@ def args_parser():
         required=False,
         default=10
     )
+    parser.add_argument(
+        "-p",
+        "--proxy",
+        help="Enable proxy (Default False)",
+        type=bool,
+        required=False,
+        default=True
+    )
     args = parser.parse_args()
     return args
 
 
-def fetch(url, session, log_file):
-    fake_header = Headers(headers=False).generate()
+def fetch(url, session, log_file, proxy):
+    fh = Headers(headers=False).generate()
 
     try:
-        with session.get(url, headers=fake_header) as response:
-            status = response.status_code
+        if proxy:
+            get_new_ip()
+
+            proxies = {
+                "http": "socks5://127.0.0.1:9050",
+                "https": "socks5://127.0.0.1:9050"
+            }
+
+            with session.get(url, headers=fh, proxies=proxies) as response:
+                status = response.status_code
+        else:
+            with session.get(url, headers=fh) as response:
+                status = response.status_code
 
         if status < 400:
             print(f"+ [+] Found: {url.strip()} (Status: {status})")
@@ -56,6 +79,19 @@ def count_wordlist_len(wordlist):
     with wordlist.open(mode="r") as f:
         wordlist_len = f.readlines()
     return len(wordlist_len)
+
+
+def get_new_ip():
+    with Controller.from_port(port=9051) as c:
+        c.authenticate()
+        c.signal(Signal.NEWNYM)
+
+    time.sleep(5)
+
+
+# def scheduler_threader(job):
+#     job_thread = Thread(target=job)
+#     job_thread.start()
 
 
 def main():
@@ -79,19 +115,25 @@ def main():
     print(f"+ [*] Threads: {args.threads}")
     print("+"+"-"*50+"+")
 
+    # schedule.every(5).seconds.do(scheduler_threader, get_new_ip)
+
+    # while True:
+    #     schedule.run_pending()
+
     with requests.Session() as session:
         with cf.ThreadPoolExecutor(max_workers=args.threads) as executor:
             try:
                 tasks = [executor.submit(
-                    fetch, url, session, log_file) for url in urls]
+                    fetch, url, session, log_file, args.proxy) for url in urls]
 
                 for task in cf.as_completed(tasks):
                     result = task.result()
                     if result:
                         urls_found += 1
             except KeyboardInterrupt:
-                print(f"\n+ [!] Keyboard interrupt detected, exiting... [!]")
-                pass
+                print(
+                    f"\n+ [!] Keyboard interrupt detected, exiting... [!]")
+                # break
 
     end = datetime.now().strftime("%d/%m/%Y - %H:%M:%S")
     te = time.perf_counter()
