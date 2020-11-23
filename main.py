@@ -4,12 +4,33 @@ import time
 import requests
 import uuid
 # import schedule
+# import socks
+# import socket
+import sys
+import threading
+from queue import Queue
 from datetime import datetime
 from fake_headers import Headers
 from stem import Signal
 from stem.control import Controller
 # from threading import Thread
-import concurrent.futures as cf
+# import concurrent.futures as cf
+
+
+class Worker(threading.Thread):
+    def __init__(self, queue, session, log_file):
+        threading.Thread.__init__(self)
+        self.queue = queue
+        self.session = session
+        self.log_file = log_file
+
+    def run(self):
+        while True:
+            url = self.queue.get()
+            try:
+                fetch(url, self.session, self.log_file)
+            finally:
+                self.queue.task_done()
 
 
 def args_parser():
@@ -42,33 +63,32 @@ def args_parser():
         help="Enable proxy (Default False)",
         type=bool,
         required=False,
-        default=True
+        default=False
     )
     args = parser.parse_args()
     return args
 
 
-def fetch(url, session, log_file, proxy):
+def fetch(url, session, log_file):
     fh = Headers(headers=False).generate()
 
     try:
-        if proxy:
-            get_new_ip()
+        # if proxy:
+        #     get_new_ip()
 
-            proxies = {
-                "http": "socks5://127.0.0.1:9050",
-                "https": "socks5://127.0.0.1:9050"
-            }
+        #     proxies = {
+        #         "http": "socks5://127.0.0.1:9050",
+        #         "https": "socks5://127.0.0.1:9050"
+        #     }
 
-            with session.get(url, headers=fh, proxies=proxies) as response:
-                status = response.status_code
-        else:
-            with session.get(url, headers=fh) as response:
-                status = response.status_code
+        with session.get(url, headers=fh) as response:
+            status = response.status_code
 
         if status < 400:
-            print(f"+ [+] Found: {url.strip()} (Status: {status})")
-            return True
+            with threading.Lock():
+                print(f"+ [+] Found: {url.strip()} (Status: {status})")
+                # print(f"+ [*] Source ip: {get_external_ip()}")
+                return True
     except requests.exceptions.RequestException as e:
         print(f"+ [!] An exception occurred: See log file... [!]")
         with log_file.open(mode="a") as f:
@@ -81,12 +101,15 @@ def count_wordlist_len(wordlist):
     return len(wordlist_len)
 
 
-def get_new_ip():
-    with Controller.from_port(port=9051) as c:
-        c.authenticate()
-        c.signal(Signal.NEWNYM)
+# def get_external_ip():
+#     ext_ip = requests.get("https://api.ipify.org").text
+#     return ext_ip
 
-    time.sleep(5)
+
+# def get_new_ip():
+#     with Controller.from_port(port=9051) as c:
+#         c.authenticate(password="215099")
+#         c.signal(Signal.NEWNYM)
 
 
 # def scheduler_threader(job):
@@ -101,10 +124,13 @@ def main():
     args = args_parser()
     wordlist = pathlib.Path(args.wordlist).resolve()
     wordlist_len = count_wordlist_len(wordlist)
-    urls = (f"{args.url}/{url}" for url in wordlist.open(mode="r"))
-    urls_found = 0
+    urls = Queue()
+    # urls_found = 0
     log_filename = str(uuid.uuid4())
     log_file = pathlib.Path(f"{log_filename}.log").resolve()
+
+    for url in wordlist.open(mode="r"):
+        urls.put(f"{args.url}/{url}")
 
     print("+"+"-"*50+"+")
     print(f"+ [*] Started at {start}")
@@ -120,27 +146,23 @@ def main():
     # while True:
     #     schedule.run_pending()
 
-    with requests.Session() as session:
-        with cf.ThreadPoolExecutor(max_workers=args.threads) as executor:
-            try:
-                tasks = [executor.submit(
-                    fetch, url, session, log_file, args.proxy) for url in urls]
+    try:
+        with requests.Session() as session:
+            for _ in range(args.threads):
+                worker = Worker(urls, session, log_file)
+                worker.daemon = True
+                worker.start()
 
-                for task in cf.as_completed(tasks):
-                    result = task.result()
-                    if result:
-                        urls_found += 1
-            except KeyboardInterrupt:
-                print(
-                    f"\n+ [!] Keyboard interrupt detected, exiting... [!]")
-                # break
+            urls.join()
+    except KeyboardInterrupt:
+        sys.exit(0)
 
     end = datetime.now().strftime("%d/%m/%Y - %H:%M:%S")
     te = time.perf_counter()
 
     print("+"+"-"*50+"+")
     print(f"+ [*] Finished at {end}")
-    print(f"+ [*] Found {urls_found} urls in {round(te-ts,2)} seconds")
+    # print(f"+ [*] Found {urls_found} urls in {round(te-ts,2)} seconds")
     print("+"+"-"*50+"+")
 
 
